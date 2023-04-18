@@ -1,2 +1,3 @@
-package com.nfeeds.adapter.usermanager.models;public class UserInfo {
-}
+package com.nfeeds.adapter.usermanager.models;
+
+public record UserInfo (String salt, String hashpsw) {}
