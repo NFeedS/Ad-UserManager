@@ -12,4 +12,4 @@ package com.nfeeds.adapter.usermanager.models;
  * @param topicId The topic to which the user is subscribed to.
  * @param callback The endpoint to which the system will send messages to.
  */
-public record SubsctiptionInfo(String userId, String topicId, String callback) {}
+public record SubscriptionInfo(String userId, String topicId, String callback) {}
