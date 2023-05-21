@@ -17,11 +17,9 @@ import java.security.spec.InvalidKeySpecException;
 @Service
 public class UserManagerService {
 
-    /** Instance of <code>AuthRemoteCallService</code> to abstract the remote calls done to DL-Auth */
     private final AuthRemoteCallService authRemoteCallService;
-
-    /** Instance of <code>SubscriptionsRemoteCallService</code> to abstract the remote calls done to DL-Subscriptions */
     private final SubscriptionsRemoteCallService subscriptionsRemoteCallService;
+
 
     public UserManagerService(AuthRemoteCallService authRemoteCallService, SubscriptionsRemoteCallService subscriptionsRemoteCallService) {
         this.authRemoteCallService = authRemoteCallService;
@@ -29,7 +27,8 @@ public class UserManagerService {
     }
 
     /**
-     * Given an id and a password will create a new user.
+     * Given an id and a password will generate a salt and hash the password,
+     * adding then a new entry in the users table and subscribe it to the system default topic.
      * @param id The unique identifier of the user to create.
      * @param psw The password that the user will use to authenticate.
      * @return True if the procedure goes well, False if the user already exists.
@@ -48,7 +47,22 @@ public class UserManagerService {
         var salt = AuthUtils.generateSalt();
         var hash = AuthUtils.hashPassword(psw,salt);
 
-        return authRemoteCallService.postNewUser(id,salt,hash);
+        if (!authRemoteCallService.postNewUser(id,salt,hash)){
+            return false;
+        }
+
+        // if the user has been successfully created add a subscription to the system default topic.
+        subscriptionsRemoteCallService.postNewSubscription(id,"system_default", "");
+
+        return true;
+    }
+
+    public boolean addSubscription(String user_id, String topic_id, String callback) throws IOException, InterruptedException {
+        return subscriptionsRemoteCallService.postNewSubscription(user_id,topic_id, callback);
+    }
+
+    public boolean removeSubscription(String user_id, String topic_id) throws IOException, InterruptedException {
+        return subscriptionsRemoteCallService.deleteSubscription(user_id,topic_id);
     }
 
     /**
@@ -68,12 +82,10 @@ public class UserManagerService {
         }
 
         if(getResponse.right.isPresent()){
-            try {
-                var info = new ObjectMapper().readValue(getResponse.right.get(), UserInfo.class);
-                return AuthUtils.validate(psw,info);
-            } catch (JsonProcessingException e) {
-                return false;
-            }
+
+            var info = getResponse.right.get();
+            return AuthUtils.validate(psw,info);
+
         }
 
         return false;

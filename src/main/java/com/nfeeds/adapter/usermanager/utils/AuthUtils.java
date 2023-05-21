@@ -27,7 +27,7 @@ public class AuthUtils {
     }
 
     /**
-     * <p> Given a password and a salt will generate an hash to be stored in the database for authentication </p>
+     * <p> Given a password and a salt will generate an hash combining the two using <code>PBEKeySpec</code> and <code>SecretKeyFactory</code> with the algorithm <code>PBKDF2WithHmacSHA1</code> </p>
      * @param psw Clear password provided.
      * @param salt Random string generated previously.
      * @return The hash of the password provided.

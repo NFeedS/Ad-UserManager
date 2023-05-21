@@ -1,0 +1,22 @@
+.git
+.gitignore
+
+# Docker
+.dockerignore
+*Dockerfile*
+*docker-compose*
+
+*.jar
+**/.DS_Store
+*.log
+
+**/.classpath
+.idea
+*.iml
+.metadata
+**/.project
+**/.settings
+
+**/bin
+**/target
+**/README.md

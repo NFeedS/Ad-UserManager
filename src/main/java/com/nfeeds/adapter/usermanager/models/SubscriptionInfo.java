@@ -5,7 +5,7 @@ package com.nfeeds.adapter.usermanager.models;
  * <p> To marshall a String to this record use: </p>
  * <pre>
  * {@code
- * var sub_info = new ObjectMapper().readValue( jsonString , SubsctiptionInfo.class);
+ * var sub_info = new ObjectMapper().readValue( jsonString , SubscriptionInfo.class);
  * }
  * </pre>
  * @param userId The unique id of the user that has this subscription.
