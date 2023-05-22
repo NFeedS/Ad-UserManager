@@ -1,19 +1,20 @@
 package com.nfeeds.adapter.usermanager.services;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lm.wrapper.http.JHWrapper;
 import com.nfeeds.adapter.usermanager.models.SubscriptionInfo;
-import org.apache.commons.lang3.tuple.ImmutablePair;
+import com.nfeeds.adapter.usermanager.models.SubscriptionModel;
+import com.nfeeds.adapter.usermanager.utils.HttpUtils;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 
 import java.io.IOException;
 import java.util.*;
 
-/**
- * Service that provides functions to perform specific remote http calls to the service DL-Subscriptions.
- */
+@Log4j2
 @Service
 public class SubscriptionsRemoteCallService {
 
@@ -21,55 +22,64 @@ public class SubscriptionsRemoteCallService {
     private String baseUrl;
 
 
-    public boolean postNewSubscription(String user_id, String topic_id, String callback) throws IOException, InterruptedException {
-        var mapper = new ObjectMapper();
-        var jsonBody = mapper.createObjectNode();
-        jsonBody.put("userId", user_id);
-        jsonBody.put("topicId", topic_id);
-        jsonBody.put("callback", callback);
-
-        var response = JHWrapper.remotePostCall(baseUrl+"subscriptions", jsonBody.asText());
+    public boolean postNewSubscription(SubscriptionInfo subscription) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - postNewSubscription");
+        
+        var body = new ObjectMapper().writeValueAsString(subscription);
+        var uri = new DefaultUriBuilderFactory(baseUrl).builder().build();
+        var response = HttpUtils.postRequest(uri,body);
 
         return response.statusCode() == HttpStatus.CREATED.value();
     }
 
 
-    public ImmutablePair<HttpStatus, Optional<List<SubscriptionInfo>>> getSubscriptionsOfUser(String user_id) throws IOException, InterruptedException {
-        var response = JHWrapper.remoteGetCall(baseUrl,"subscriptions/search/user", Map.of(), Map.of(), Map.of("id", user_id));
-
-        if(response.body() == null) {
-            return new ImmutablePair<>(HttpStatus.resolve(response.statusCode()), Optional.empty());
+    public Optional<List<SubscriptionModel>> getSubscriptionsOfUser(String user_id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - getSubscriptionsOfUser");
+        
+        var uri = new DefaultUriBuilderFactory(baseUrl).builder().path("user/{id}").build(user_id);
+        var response = HttpUtils.getRequest(uri);
+        
+        try{
+            return Optional.of(new ObjectMapper().readerForListOf(SubscriptionInfo.class).readValue(response.body()));
+        } catch (JsonProcessingException exception){
+            return Optional.empty();
         }
-
-        var sub_info = Arrays.asList(new ObjectMapper().readValue(response.body(), SubscriptionInfo[].class));
-        return new ImmutablePair<>(HttpStatus.resolve(response.statusCode()), Optional.ofNullable(sub_info));
     }
 
 
-    public ImmutablePair<HttpStatus, Optional<List<SubscriptionInfo>>> getSubscriptionsOnATopic(String topic_id) throws IOException, InterruptedException {
-        var response = JHWrapper.remoteGetCall(baseUrl,"subscriptions/search/topic", Map.of(), Map.of(), Map.of("id", topic_id));
-
-        if(response.body() == null) {
-            return new ImmutablePair<>(HttpStatus.resolve(response.statusCode()), Optional.empty());
+    public Optional<List<SubscriptionModel>> getSubscriptionsOnATopic(String topic_id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - getSubscriptionsOnATopic");
+        
+        var uri = new DefaultUriBuilderFactory(baseUrl).builder().path("topic/{id}").build(topic_id);
+        var response = HttpUtils.getRequest(uri);
+        
+        try{
+            return Optional.of(new ObjectMapper().readerForListOf(SubscriptionInfo.class).readValue(response.body()));
+        } catch (JsonProcessingException exception){
+            return Optional.empty();
         }
-
-        var sub_info_list = Arrays.asList(new ObjectMapper().readValue(response.body(), SubscriptionInfo[].class));
-        return new ImmutablePair<>(HttpStatus.resolve(response.statusCode()), Optional.of(sub_info_list));
     }
 
 
     public boolean deleteSubscription(String id) throws IOException, InterruptedException {
-        return HttpStatus.resolve(JHWrapper.remoteDeleteCall(baseUrl,"subscriptions/{id}",Map.of("id", id)).statusCode()) == HttpStatus.NO_CONTENT;
+        log.debug(this.getClass().getSimpleName() + " - deleteSubscription");
+        
+        var uri = new DefaultUriBuilderFactory(baseUrl).builder().path("{id}").build(id);
+        var response = HttpUtils.deleteRequest(uri);
+        
+        return response.statusCode() == HttpStatus.NO_CONTENT.value();
     }
 
-    public boolean deleteSubscription(String user_id, String topic_id) throws IOException, InterruptedException {
+    public void deleteSubscription(String user_id, String topic_id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - deleteSubscription");
         var subs_resp = getSubscriptionsOfUser(user_id);
 
-        if(subs_resp.right.isEmpty()){ return false; }
-        var subs = subs_resp.right.get();
+        if(subs_resp.isEmpty()){ return; }
+        var subs = subs_resp.get();
 
-        var sub = subs.stream().filter((s) -> Objects.equals(s.topicId(), topic_id));
-
-        return HttpStatus.resolve(JHWrapper.remoteDeleteCall(baseUrl,"subscriptions/{id}",Map.of("id", user_id)).statusCode()) == HttpStatus.NO_CONTENT;
+        var sub = subs.stream().filter((s) -> Objects.equals(s.topicId(), topic_id)).toList();
+        for(var s : sub){
+            deleteSubscription(s.id());
+        }
     }
 }

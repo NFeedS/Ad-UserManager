@@ -1,13 +1,12 @@
 package com.nfeeds.adapter.usermanager.utils;
 
-import com.nfeeds.adapter.usermanager.models.UserInfo;
+import com.nfeeds.adapter.usermanager.models.UserModel;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.KeySpec;
 import java.util.Arrays;
 
 /**
@@ -62,7 +61,7 @@ public class AuthUtils {
      * @param info The salt and hash of the user stored in the db.
      * @return True if the hash produced using the user information and the password provided is equal to the hash stored, False otherwise or if an error arise.
      */
-    public static boolean validate(String psw, UserInfo info) {
+    public static boolean validate(String psw, UserModel info) {
         return validate(psw,info.salt(), info.hashpsw());
     }
 }

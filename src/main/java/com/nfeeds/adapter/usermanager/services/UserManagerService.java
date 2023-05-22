@@ -1,93 +1,98 @@
 package com.nfeeds.adapter.usermanager.services;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nfeeds.adapter.usermanager.models.UserInfo;
+import com.nfeeds.adapter.usermanager.models.SubscriptionInfo;
+import com.nfeeds.adapter.usermanager.models.SubscriptionModel;
+import com.nfeeds.adapter.usermanager.models.UserModel;
 import com.nfeeds.adapter.usermanager.utils.AuthUtils;
+import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
+import java.util.List;
 
-/**
- * Service that provides functions directly related to the functionalities of the UserManager module.
- */
+
+@Log4j2
+@AllArgsConstructor
 @Service
 public class UserManagerService {
 
     private final AuthRemoteCallService authRemoteCallService;
     private final SubscriptionsRemoteCallService subscriptionsRemoteCallService;
-
-
-    public UserManagerService(AuthRemoteCallService authRemoteCallService, SubscriptionsRemoteCallService subscriptionsRemoteCallService) {
-        this.authRemoteCallService = authRemoteCallService;
-        this.subscriptionsRemoteCallService = subscriptionsRemoteCallService;
+    
+    public UserModel getUser(String id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - getUser");
+        return authRemoteCallService.getUser(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
     }
-
-    /**
-     * Given an id and a password will generate a salt and hash the password,
-     * adding then a new entry in the users table and subscribe it to the system default topic.
-     * @param id The unique identifier of the user to create.
-     * @param psw The password that the user will use to authenticate.
-     * @return True if the procedure goes well, False if the user already exists.
-     * @throws IOException
-     * @throws InterruptedException
-     * @throws NoSuchAlgorithmException
-     * @throws InvalidKeySpecException
-     */
+    
     public boolean createNewUser(String id, String psw) throws IOException, InterruptedException, NoSuchAlgorithmException, InvalidKeySpecException {
-
+        log.debug(this.getClass().getSimpleName() + " - createNewUser");
+        
         // check that the user doesn't exist already
-        if (authRemoteCallService.getUser(id).left != HttpStatus.NOT_FOUND) {
-            return false;
+        if (authRemoteCallService.getUser(id).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User already exists");
         }
 
         var salt = AuthUtils.generateSalt();
         var hash = AuthUtils.hashPassword(psw,salt);
-
-        if (!authRemoteCallService.postNewUser(id,salt,hash)){
-            return false;
+        
+        var user_instance = new UserModel(id,salt,hash);
+        
+        if (!authRemoteCallService.postNewUser(user_instance)){
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed user creation");
         }
 
         // if the user has been successfully created add a subscription to the system default topic.
-        subscriptionsRemoteCallService.postNewSubscription(id,"system_default", "");
+        subscriptionsRemoteCallService.postNewSubscription(new SubscriptionInfo(id,"system_default", ""));
 
         return true;
     }
-
+    
+    
+    public boolean deleteUser(String user_id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - deleteUser");
+        
+        var subs = subscriptionsRemoteCallService.getSubscriptionsOfUser(user_id);
+        if(subs.isEmpty()){
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found while deleting subscriptions.");
+        }
+        
+        for (var s : subs.get()){
+            subscriptionsRemoteCallService.deleteSubscription(s.id());
+        }
+        
+        return authRemoteCallService.deleteUser(user_id);
+    }
+    
+    public List<SubscriptionModel> getSubscriptionsByUser(String user_id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - getSubscriptionsByUser");
+        return subscriptionsRemoteCallService.getSubscriptionsOfUser(user_id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Subscriptions of user not found"));
+    }
     public boolean addSubscription(String user_id, String topic_id, String callback) throws IOException, InterruptedException {
-        return subscriptionsRemoteCallService.postNewSubscription(user_id,topic_id, callback);
+        log.debug(this.getClass().getSimpleName() + " - addSubscription");
+        return subscriptionsRemoteCallService.postNewSubscription(new SubscriptionInfo(user_id,topic_id, callback));
     }
+    
 
-    public boolean removeSubscription(String user_id, String topic_id) throws IOException, InterruptedException {
-        return subscriptionsRemoteCallService.deleteSubscription(user_id,topic_id);
+    public void removeSubscription(String user_id, String topic_id) throws IOException, InterruptedException {
+        log.debug(this.getClass().getSimpleName() + " - removeSubscription");
+        subscriptionsRemoteCallService.deleteSubscription(user_id,topic_id);
     }
-
-    /**
-     * Checks if the password provided correspond to the hash of the user with the id provided.
-     * @param id The unique identifier of the user to authenticate.
-     * @param psw The password to hash and validate.
-     * @return True if there are no error and the check is positive, False otherwise or if the user was not found.
-     * @throws IOException
-     * @throws InterruptedException
-     */
+    
+    
     public boolean checkAuthorization(String id, String psw) throws IOException, InterruptedException {
 
         var getResponse = authRemoteCallService.getUser(id);
-
-        if (getResponse.left != HttpStatus.OK) {
+        
+        if (getResponse.isEmpty()) {
             return false;
         }
-
-        if(getResponse.right.isPresent()){
-
-            var info = getResponse.right.get();
-            return AuthUtils.validate(psw,info);
-
-        }
-
-        return false;
+        
+        var info = getResponse.get();
+        return AuthUtils.validate(psw,info);
     }
 }
